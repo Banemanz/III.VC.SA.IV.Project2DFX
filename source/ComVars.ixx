@@ -1,7 +1,11 @@
 module;
 
 #include <FileWatch.hpp>
+#include <array>
+#include <cctype>
+#include <cstdlib>
 #include <filesystem>
+#include <string>
 #include "IniReader.h"
 
 export module ComVars;
@@ -12,7 +16,7 @@ export
     bool bRenderLodLights;
     float fCoronaRadiusMultiplier;
     bool bSlightlyIncreaseRadiusWithDistance;
-    float fCoronaFarClip;
+    float fCoronaFarClip, fCoronaFarClipBase;
     bool autoFarClip;
     bool bRenderStaticShadowsForLODs;
     bool bIncreasePedsCarsShadowsDrawDistance;
@@ -47,6 +51,65 @@ export
     int nNumDistantCarImpostors = 2000;
     float fDistantCarsRadiusMultiplier = 1.0f;
 
+    std::array<float, 23> fWeatherCoronaFarClipMult{};
+    std::array<bool, 23> bExcludeNoDistanceGroundWeather{};
+    float fNoDistanceGroundExcludeHeight = 2.5f;
+
+    void ParseWeatherFloatList(const std::string& text, std::array<float, 23>& values)
+    {
+        size_t start = 0;
+        for (size_t index = 0; index < values.size() && start <= text.size(); ++index)
+        {
+            const size_t end = text.find(',', start);
+            std::string token = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+            token.erase(std::remove_if(token.begin(), token.end(), [](unsigned char ch) { return std::isspace(ch) != 0; }), token.end());
+
+            if (!token.empty())
+            {
+                char* parseEnd = nullptr;
+                const float parsed = std::strtof(token.c_str(), &parseEnd);
+                if (parseEnd && *parseEnd == '\0')
+                    values[index] = std::max(parsed, 0.0f);
+            }
+
+            if (end == std::string::npos)
+                break;
+            start = end + 1;
+        }
+    }
+
+    void ParseWeatherExcludeList(const std::string& text, std::array<bool, 23>& values)
+    {
+        values.fill(false);
+
+        size_t start = 0;
+        while (start <= text.size())
+        {
+            const size_t end = text.find(',', start);
+            std::string token = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+            token.erase(std::remove_if(token.begin(), token.end(), [](unsigned char ch) { return std::isspace(ch) != 0; }), token.end());
+
+            if (!token.empty())
+            {
+                if (token == "*")
+                {
+                    values.fill(true);
+                }
+                else
+                {
+                    char* parseEnd = nullptr;
+                    const long id = std::strtol(token.c_str(), &parseEnd, 10);
+                    if (parseEnd && *parseEnd == '\0' && id >= 0 && id < static_cast<long>(values.size()))
+                        values[static_cast<size_t>(id)] = true;
+                }
+            }
+
+            if (end == std::string::npos)
+                break;
+            start = end + 1;
+        }
+    }
+
     void ReadIniSettings()
     {
         CIniReader iniReader("");
@@ -57,15 +120,26 @@ export
         fCoronaRadiusMultiplier = iniReader.ReadFloat("LodLights", "CoronaRadiusMultiplier", 1.0f);
         bSlightlyIncreaseRadiusWithDistance = iniReader.ReadInteger("LodLights", "SlightlyIncreaseRadiusWithDistance", 1) != 0;
         if (iniReader.ReadString("LodLights", "CoronaFarClip", "auto") != "auto")
+        {
             fCoronaFarClip = iniReader.ReadFloat("LodLights", "CoronaFarClip", 0.0f);
+            fCoronaFarClipBase = fCoronaFarClip;
+            autoFarClip = false;
+        }
         else
+        {
             autoFarClip = true;
+            fCoronaFarClipBase = 0.0f;
+        }
         fCoronaAlphaNearMinMult = iniReader.ReadFloat("LodLights", "CoronaAlphaNearMinMult", 0.50f);
         fCoronaAlphaReachOneAt = iniReader.ReadFloat("LodLights", "CoronaAlphaReachOneAt", 350.0f);
         fCoronaAlphaBoostStartAt = iniReader.ReadFloat("LodLights", "CoronaAlphaBoostStartAt", 700.0f);
         fCoronaAlphaFarBoostMax = iniReader.ReadFloat("LodLights", "CoronaAlphaFarBoostMax", 4.0f);
         nNumDistantCarImpostors = iniReader.ReadInteger("LodLights", "MaxNumberOfDistantCars", 2000);
         fDistantCarsRadiusMultiplier = iniReader.ReadFloat("LodLights", "DistantCarsRadiusMultiplier", 1.0f);
+        fWeatherCoronaFarClipMult.fill(1.0f);
+        ParseWeatherFloatList(iniReader.ReadString("LodLights", "WeatherCoronaFarClipMultipliers", "1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0"), fWeatherCoronaFarClipMult);
+        ParseWeatherExcludeList(iniReader.ReadString("LodLights", "ExcludeNoDistanceGroundInWeathers", ""), bExcludeNoDistanceGroundWeather);
+        fNoDistanceGroundExcludeHeight = iniReader.ReadFloat("LodLights", "NoDistanceGroundExcludeHeight", 2.5f);
 
         // StaticShadows section
         bRenderStaticShadowsForLODs = iniReader.ReadInteger("StaticShadows", "RenderStaticShadowsForLODs", 0) != 0;
