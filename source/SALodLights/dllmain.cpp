@@ -466,6 +466,9 @@ void GetMemoryAddresses()
     CWeather::Rain.SetAddress((float*)0xC81324);
     CWeather::Foggyness.SetAddress((float*)0xC81300);
     CWeather::UnderWaterness.SetAddress((float*)0xC8132C);
+    CWeather::OldWeatherType.SetAddress((short*)0xC81318);
+    CWeather::NewWeatherType.SetAddress((short*)0xC8131C);
+    CWeather::InterpolationValue.SetAddress((float*)0xC8130C);
     gpCoronaTexture = (RwTexture**)0xC3E000;
 
     CSprite::CalcScreenCoorsMaxMin = (decltype(CSprite::CalcScreenCoorsMaxMin))0x70CE30;

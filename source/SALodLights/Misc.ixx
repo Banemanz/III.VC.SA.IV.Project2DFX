@@ -192,6 +192,9 @@ export namespace CWeather
     GameRef<float> Rain;
     GameRef<float> Foggyness;
     GameRef<float> UnderWaterness;
+    GameRef<short> OldWeatherType;
+    GameRef<short> NewWeatherType;
+    GameRef<float> InterpolationValue;
 }
 
 export RwTexture** gpCoronaTexture;

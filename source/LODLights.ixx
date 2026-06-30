@@ -2,6 +2,7 @@ module;
 
 #define NOMINMAX
 #include <stdafx.h>
+#include <cmath>
 #include <unordered_map>
 
 export module LODLights;
@@ -511,7 +512,24 @@ public:
         unsigned int nTime = CClock::ms_nGameClockHours * 60 + CClock::ms_nGameClockMinutes;
         unsigned int curMin = CClock::ms_nGameClockMinutes;
 
-        fCoronaFarClip = autoFarClip ? CTimeCycle::m_fCurrentFarClip : fCoronaFarClip;
+        auto GetWeatherMultiplier = []() -> float
+        {
+            const int oldWeather = std::clamp(static_cast<int>(CWeather::OldWeatherType), 0, static_cast<int>(fWeatherCoronaFarClipMult.size() - 1));
+            const int newWeather = std::clamp(static_cast<int>(CWeather::NewWeatherType), 0, static_cast<int>(fWeatherCoronaFarClipMult.size() - 1));
+            const float interpolation = std::clamp(static_cast<float>(CWeather::InterpolationValue), 0.0f, 1.0f);
+            return std::lerp(fWeatherCoronaFarClipMult[oldWeather], fWeatherCoronaFarClipMult[newWeather], interpolation);
+        };
+
+        auto IsNoDistanceGroundWeatherExcluded = []() -> bool
+        {
+            const int oldWeather = std::clamp(static_cast<int>(CWeather::OldWeatherType), 0, static_cast<int>(bExcludeNoDistanceGroundWeather.size() - 1));
+            const int newWeather = std::clamp(static_cast<int>(CWeather::NewWeatherType), 0, static_cast<int>(bExcludeNoDistanceGroundWeather.size() - 1));
+            return bExcludeNoDistanceGroundWeather[oldWeather] || bExcludeNoDistanceGroundWeather[newWeather];
+        };
+
+        const float weatherCoronaFarClipMult = GetWeatherMultiplier();
+        fCoronaFarClip = (autoFarClip ? CTimeCycle::m_fCurrentFarClip : fCoronaFarClipBase) * weatherCoronaFarClipMult;
+        const bool excludeNoDistanceGround = IsNoDistanceGroundWeatherExcluded();
 
         // Use fixed reference for size calculations to prevent size changes with far clip
         const float REFERENCE_FAR_CLIP = 1000.0f;
@@ -540,6 +558,17 @@ public:
             float dy = pCamPos->y - it->vecPos.y;
             float dz = pCamPos->z - it->vecPos.z;
             float fDistSqr = dx * dx + dy * dy + dz * dz;
+
+            if (excludeNoDistanceGround && it->nNoDistance)
+            {
+                bool groundFound = false;
+                const float groundZ = CWorld::FindGroundZFor3DCoord(it->vecPos.x, it->vecPos.y, it->vecPos.z + 3.0f, &groundFound, nullptr);
+                if (groundFound && it->vecPos.z - groundZ <= fNoDistanceGroundExcludeHeight)
+                {
+                    TouchCorona(coronaId);
+                    continue;
+                }
+            }
 
             float fEffectiveDrawDistance = it->fObjectDrawDistance * fScale;
             float fEffectiveCoronaDist = fEffectiveDrawDistance - 30.0f;
